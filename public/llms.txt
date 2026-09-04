@@ -1,0 +1,8 @@
+# Hours Ledger
+
+Hours Ledger is a private, browser-based work-hours tracker. Users can log, edit, and delete shifts. Records are stored in the browser's local storage and are not sent to a server.
+
+## Pages
+
+- Overview: review weekly and all-time totals.
+- Log hours: add and manage individual shifts.

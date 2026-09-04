@@ -1,0 +1,13 @@
+name = "hours-ledger-api"
+main = "src/index.js"
+compatibility_date = "2026-09-04"
+
+[vars]
+# GitHub Pages project origin for this repository.
+ALLOWED_ORIGIN = "https://arielgrodsky-ship-it.github.io"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "hours-ledger"
+database_id = "4d666831-6fce-4e62-8cbc-c634327bef1d"
+migrations_dir = "migrations"

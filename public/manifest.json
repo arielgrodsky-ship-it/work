@@ -1,0 +1,10 @@
+{
+  "name": "Hours Ledger",
+  "short_name": "Hours Ledger",
+  "description": "A private work-hours tracker.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f5f6f2",
+  "theme_color": "#1c2826",
+  "icons": [{ "src": "./favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}
