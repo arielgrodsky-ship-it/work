@@ -1,7 +1,8 @@
 import './style.css';
 
 const STORAGE_KEY = 'hours-ledger.entries.v1';
-const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+const configuredApiUrl = (import.meta.env.VITE_API_URL || '').trim();
+const API_URL = configuredApiUrl ? `${configuredApiUrl.startsWith('http') ? '' : 'https://'}${configuredApiUrl}`.replace(/\/$/, '') : '';
 const API_TOKEN = import.meta.env.VITE_API_TOKEN || '';
 const app = document.querySelector('#app');
 const state = { entries: loadEntries(), route: getRoute(), editingId: null };
