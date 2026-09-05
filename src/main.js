@@ -39,7 +39,9 @@ function todayKey() {
 async function refreshOpeningRate() {
   if (!API_URL) return;
   const cached = loadOpeningRate();
-  if (cached?.date === todayKey()) return;
+  const today = todayKey();
+  const day = new Date(`${today}T12:00:00Z`).getUTCDay();
+  if (cached?.date === today && (cached.marketDate === today || day === 0 || day === 6)) return;
   try {
     const marketRate = await apiRequest('/api/rates/usd-ils');
     const nextRate = { date: todayKey(), marketDate: marketRate.marketDate, valueType: marketRate.valueType, rate: Number(marketRate.rate) };
@@ -102,7 +104,8 @@ function formatDollarTotal(entries = state.entries) {
 }
 
 function openingRateNote() {
-  return state.openingRate ? `${state.openingRateValueType === 'close' ? 'Friday close' : 'Opening'} ${formatDate(state.openingRateMarketDate)}: ₪${state.openingRate.toFixed(4)} / $1` : 'Daily rate unavailable';
+  const label = state.openingRateValueType === 'close' ? 'Friday close' : state.openingRateValueType === 'reference' ? 'ECB reference' : 'Opening';
+  return state.openingRate ? `${label} ${formatDate(state.openingRateMarketDate)}: ₪${state.openingRate.toFixed(4)} / $1` : 'Daily rate unavailable';
 }
 
 function currentWeekEntries() {
