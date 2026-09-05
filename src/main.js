@@ -3,13 +3,12 @@ import './style.css';
 const STORAGE_KEY = 'hours-ledger.entries.v1';
 const RATE_STORAGE_KEY = 'hours-ledger.usd-ils-opening.v1';
 const HOURLY_RATE_SHEKELS = 28;
-const RATE_ENDPOINT = 'https://query1.finance.yahoo.com/v8/finance/chart/USDILS=X';
 const configuredApiUrl = (import.meta.env.VITE_API_URL || '').trim();
 const API_URL = configuredApiUrl ? `${configuredApiUrl.startsWith('http') ? '' : 'https://'}${configuredApiUrl}`.replace(/\/$/, '') : '';
 const API_TOKEN = import.meta.env.VITE_API_TOKEN || '';
 const app = document.querySelector('#app');
 const cachedRate = loadOpeningRate();
-const state = { entries: loadEntries(), route: getRoute(), editingId: null, openingRate: cachedRate?.rate || null, openingRateMarketDate: cachedRate?.marketDate || null };
+const state = { entries: loadEntries(), route: getRoute(), editingId: null, openingRate: cachedRate?.rate || null, openingRateMarketDate: cachedRate?.marketDate || null, openingRateValueType: cachedRate?.valueType || null };
 
 function loadEntries() {
   try {
@@ -38,23 +37,16 @@ function todayKey() {
 }
 
 async function refreshOpeningRate() {
+  if (!API_URL) return;
   const cached = loadOpeningRate();
   if (cached?.date === todayKey()) return;
   try {
-    const end = Math.floor(Date.now() / 1000);
-    const response = await fetch(`${RATE_ENDPOINT}?period1=${end - 7 * 86400}&period2=${end}&interval=1d&events=history`);
-    if (!response.ok) throw new Error(`Opening rate request failed (${response.status})`);
-    const chart = await response.json();
-    const result = chart.chart?.result?.[0];
-    const timestamps = result?.timestamp || [];
-    const opens = result?.indicators?.quote?.[0]?.open || [];
-    const latestIndex = opens.reduce((index, value, currentIndex) => Number.isFinite(value) ? currentIndex : index, -1);
-    if (latestIndex < 0 || !timestamps[latestIndex]) throw new Error('Opening rate was not available');
-    const rate = Number(opens[latestIndex]);
-    const nextRate = { date: todayKey(), marketDate: new Date(timestamps[latestIndex] * 1000).toISOString().slice(0, 10), rate };
+    const marketRate = await apiRequest('/api/rates/usd-ils');
+    const nextRate = { date: todayKey(), marketDate: marketRate.marketDate, valueType: marketRate.valueType, rate: Number(marketRate.rate) };
     localStorage.setItem(RATE_STORAGE_KEY, JSON.stringify(nextRate));
-    state.openingRate = rate;
+    state.openingRate = nextRate.rate;
     state.openingRateMarketDate = nextRate.marketDate;
+    state.openingRateValueType = nextRate.valueType;
     render();
   } catch (error) {
     console.error(error);
@@ -110,7 +102,7 @@ function formatDollarTotal(entries = state.entries) {
 }
 
 function openingRateNote() {
-  return state.openingRate ? `Opening ${formatDate(state.openingRateMarketDate)}: ₪${state.openingRate.toFixed(4)} / $1` : 'Loading daily opening rate';
+  return state.openingRate ? `${state.openingRateValueType === 'close' ? 'Friday close' : 'Opening'} ${formatDate(state.openingRateMarketDate)}: ₪${state.openingRate.toFixed(4)} / $1` : 'Daily rate unavailable';
 }
 
 function currentWeekEntries() {
