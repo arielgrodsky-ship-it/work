@@ -1,13 +1,15 @@
 import './style.css';
 
 const STORAGE_KEY = 'hours-ledger.entries.v1';
+const RATE_STORAGE_KEY = 'hours-ledger.usd-ils-opening.v1';
 const HOURLY_RATE_SHEKELS = 28;
-const SHEKELS_PER_DOLLAR = 3.4;
+const RATE_ENDPOINT = 'https://query1.finance.yahoo.com/v8/finance/chart/USDILS=X';
 const configuredApiUrl = (import.meta.env.VITE_API_URL || '').trim();
 const API_URL = configuredApiUrl ? `${configuredApiUrl.startsWith('http') ? '' : 'https://'}${configuredApiUrl}`.replace(/\/$/, '') : '';
 const API_TOKEN = import.meta.env.VITE_API_TOKEN || '';
 const app = document.querySelector('#app');
-const state = { entries: loadEntries(), route: getRoute(), editingId: null };
+const cachedRate = loadOpeningRate();
+const state = { entries: loadEntries(), route: getRoute(), editingId: null, openingRate: cachedRate?.rate || null, openingRateMarketDate: cachedRate?.marketDate || null };
 
 function loadEntries() {
   try {
@@ -20,6 +22,43 @@ function loadEntries() {
 
 function saveEntries() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state.entries));
+}
+
+function loadOpeningRate() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(RATE_STORAGE_KEY));
+    return saved && Number.isFinite(saved.rate) ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
+function todayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+async function refreshOpeningRate() {
+  const cached = loadOpeningRate();
+  if (cached?.date === todayKey()) return;
+  try {
+    const end = Math.floor(Date.now() / 1000);
+    const response = await fetch(`${RATE_ENDPOINT}?period1=${end - 7 * 86400}&period2=${end}&interval=1d&events=history`);
+    if (!response.ok) throw new Error(`Opening rate request failed (${response.status})`);
+    const chart = await response.json();
+    const result = chart.chart?.result?.[0];
+    const timestamps = result?.timestamp || [];
+    const opens = result?.indicators?.quote?.[0]?.open || [];
+    const latestIndex = opens.reduce((index, value, currentIndex) => Number.isFinite(value) ? currentIndex : index, -1);
+    if (latestIndex < 0 || !timestamps[latestIndex]) throw new Error('Opening rate was not available');
+    const rate = Number(opens[latestIndex]);
+    const nextRate = { date: todayKey(), marketDate: new Date(timestamps[latestIndex] * 1000).toISOString().slice(0, 10), rate };
+    localStorage.setItem(RATE_STORAGE_KEY, JSON.stringify(nextRate));
+    state.openingRate = rate;
+    state.openingRateMarketDate = nextRate.marketDate;
+    render();
+  } catch (error) {
+    console.error(error);
+  }
 }
 
 async function apiRequest(path, options = {}) {
@@ -66,6 +105,14 @@ function totalShekels(entries = state.entries) {
   return totalHours(entries) * HOURLY_RATE_SHEKELS;
 }
 
+function formatDollarTotal(entries = state.entries) {
+  return state.openingRate ? formatMoney(totalShekels(entries) / state.openingRate, 'USD') : '—';
+}
+
+function openingRateNote() {
+  return state.openingRate ? `Opening ${formatDate(state.openingRateMarketDate)}: ₪${state.openingRate.toFixed(4)} / $1` : 'Loading daily opening rate';
+}
+
 function currentWeekEntries() {
   const now = new Date();
   const monday = new Date(now);
@@ -108,7 +155,7 @@ function renderOverview() {
       <article class="stat-card"><span class="stat-label">All time</span><strong>${formatHours(totalHours())}</strong><span class="stat-note">Across ${state.entries.length} shift${state.entries.length === 1 ? '' : 's'}</span></article>
       <article class="stat-card"><span class="stat-label">Average shift</span><strong>${formatHours(state.entries.length ? totalHours() / state.entries.length : 0)}</strong><span class="stat-note">A simple baseline</span></article>
       <article class="stat-card money-card"><span class="stat-label">Earned</span><strong>${formatMoney(totalShekels(), 'ILS')}</strong><span class="stat-note">At ₪${HOURLY_RATE_SHEKELS} per hour</span></article>
-      <article class="stat-card money-card"><span class="stat-label">Earned in dollars</span><strong>${formatMoney(totalShekels() / SHEKELS_PER_DOLLAR, 'USD')}</strong><span class="stat-note">Approx. at ₪${SHEKELS_PER_DOLLAR.toFixed(2)} / $1</span></article>
+      <article class="stat-card money-card"><span class="stat-label">Earned in dollars</span><strong>${formatDollarTotal()}</strong><span class="stat-note">${openingRateNote()}</span></article>
     </section>
     <section class="content-section"><div class="section-heading"><div><p class="eyebrow">Activity</p><h2>Recent shifts</h2></div><a class="text-link" href="#/log">View log <span>→</span></a></div>${renderEntries(sorted.slice(0, 5), 'Your log is ready when you are.')}</section>
   </main>`);
@@ -157,3 +204,4 @@ function render() { state.route = getRoute(); state.route === '/log' ? renderLog
 window.addEventListener('hashchange', render);
 render();
 syncEntries();
+refreshOpeningRate();
