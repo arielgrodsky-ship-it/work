@@ -1,6 +1,8 @@
 import './style.css';
 
 const STORAGE_KEY = 'hours-ledger.entries.v1';
+const HOURLY_RATE_SHEKELS = 28;
+const SHEKELS_PER_DOLLAR = 3.4;
 const configuredApiUrl = (import.meta.env.VITE_API_URL || '').trim();
 const API_URL = configuredApiUrl ? `${configuredApiUrl.startsWith('http') ? '' : 'https://'}${configuredApiUrl}`.replace(/\/$/, '') : '';
 const API_TOKEN = import.meta.env.VITE_API_TOKEN || '';
@@ -48,12 +50,20 @@ function formatHours(value) {
   return `${Number(value || 0).toFixed(2)} h`;
 }
 
+function formatMoney(value, currency) {
+  return new Intl.NumberFormat('en', { style: 'currency', currency, currencyDisplay: 'narrowSymbol', minimumFractionDigits: 2 }).format(Number(value || 0));
+}
+
 function formatDate(date) {
   return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(`${date}T12:00:00`));
 }
 
 function totalHours(entries = state.entries) {
   return entries.reduce((sum, entry) => sum + Number(entry.hours || 0), 0);
+}
+
+function totalShekels(entries = state.entries) {
+  return totalHours(entries) * HOURLY_RATE_SHEKELS;
 }
 
 function currentWeekEntries() {
@@ -97,6 +107,8 @@ function renderOverview() {
       <article class="stat-card stat-featured"><span class="stat-label">This week</span><strong>${formatHours(totalHours(week))}</strong><span class="stat-note">${week.length} shift${week.length === 1 ? '' : 's'} logged</span></article>
       <article class="stat-card"><span class="stat-label">All time</span><strong>${formatHours(totalHours())}</strong><span class="stat-note">Across ${state.entries.length} shift${state.entries.length === 1 ? '' : 's'}</span></article>
       <article class="stat-card"><span class="stat-label">Average shift</span><strong>${formatHours(state.entries.length ? totalHours() / state.entries.length : 0)}</strong><span class="stat-note">A simple baseline</span></article>
+      <article class="stat-card money-card"><span class="stat-label">Earned</span><strong>${formatMoney(totalShekels(), 'ILS')}</strong><span class="stat-note">At ₪${HOURLY_RATE_SHEKELS} per hour</span></article>
+      <article class="stat-card money-card"><span class="stat-label">Earned in dollars</span><strong>${formatMoney(totalShekels() / SHEKELS_PER_DOLLAR, 'USD')}</strong><span class="stat-note">Approx. at ₪${SHEKELS_PER_DOLLAR.toFixed(2)} / $1</span></article>
     </section>
     <section class="content-section"><div class="section-heading"><div><p class="eyebrow">Activity</p><h2>Recent shifts</h2></div><a class="text-link" href="#/log">View log <span>→</span></a></div>${renderEntries(sorted.slice(0, 5), 'Your log is ready when you are.')}</section>
   </main>`);
