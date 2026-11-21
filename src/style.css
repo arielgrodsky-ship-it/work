@@ -256,6 +256,10 @@ h3 { font-size: 17px; margin-bottom: 8px; }
   color: #f3f9ff;
 }
 
+.button-end {
+  background: #a64b43;
+  color: #fff;
+}
 .button-secondary {
   background: rgba(255,255,255,0.8);
   color: var(--ink);
@@ -477,7 +481,47 @@ h3 { font-size: 17px; margin-bottom: 8px; }
   font-weight: 800;
 }
 
-.shift-form label:nth-child(3), .shift-form label:nth-child(4), .form-actions { grid-column: 1 / -1; }
+.clock-panel,
+.shift-form label:nth-of-type(2),
+.shift-form label:nth-of-type(3),
+.form-actions { grid-column: 1 / -1; }
+
+.clock-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  min-height: 112px;
+  padding: 22px;
+  border: 1px solid rgba(144, 165, 181, 0.28);
+  border-radius: 22px;
+  background: rgba(255,255,255,0.58);
+}
+
+.clock-panel.clock-running {
+  border-color: rgba(49, 119, 87, 0.38);
+  background: rgba(220, 241, 230, 0.48);
+}
+
+.clock-panel > div {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.clock-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.clock-time {
+  font: 700 38px 'DM Mono', monospace;
+  letter-spacing: -0.04em;
+  color: var(--ink);
+}
 
 .optional {
   color: var(--muted);
@@ -582,8 +626,11 @@ input:focus, textarea:focus {
     grid-template-columns: 1fr;
     padding: 18px 16px 22px;
   }
-
-  .shift-form label:nth-child(3), .shift-form label:nth-child(4), .form-actions { grid-column: auto; }
+  .clock-panel { align-items: stretch; flex-direction: column; }
+  .clock-time { font-size: 32px; }
+  .clock-panel,
+  .shift-form label:nth-of-type(2),
+  .shift-form label:nth-of-type(3),
+  .form-actions { grid-column: auto; }
   .footer { gap: 12px; flex-direction: column; }
 }
-

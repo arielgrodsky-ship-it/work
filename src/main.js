@@ -2,13 +2,14 @@ import './style.css';
 
 const STORAGE_KEY = 'hours-ledger.entries.v1';
 const RATE_STORAGE_KEY = 'hours-ledger.usd-ils-opening.v1';
-const HOURLY_RATE_SHEKELS = 28;
+const CLOCK_STORAGE_KEY = 'hours-ledger.active-clock.v1';
+const HOURLY_RATE_SHEKELS = 33;
 const configuredApiUrl = (import.meta.env.VITE_API_URL || '').trim();
 const API_URL = configuredApiUrl ? `${configuredApiUrl.startsWith('http') ? '' : 'https://'}${configuredApiUrl}`.replace(/\/$/, '') : '';
 const API_TOKEN = import.meta.env.VITE_API_TOKEN || '';
 const app = document.querySelector('#app');
 const cachedRate = loadOpeningRate();
-const state = { entries: loadEntries(), route: getRoute(), editingId: null, openingRate: cachedRate?.rate || null, openingRateMarketDate: cachedRate?.marketDate || null, openingRateValueType: cachedRate?.valueType || null };
+const state = { entries: loadEntries(), route: getRoute(), editingId: null, activeClock: loadActiveClock(), openingRate: cachedRate?.rate || null, openingRateMarketDate: cachedRate?.marketDate || null, openingRateValueType: cachedRate?.valueType || null };
 
 function loadEntries() {
   try {
@@ -23,6 +24,19 @@ function saveEntries() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state.entries));
 }
 
+function loadActiveClock() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CLOCK_STORAGE_KEY));
+    return saved && Number.isFinite(Date.parse(saved.startedAt)) ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveActiveClock() {
+  if (state.activeClock) localStorage.setItem(CLOCK_STORAGE_KEY, JSON.stringify(state.activeClock));
+  else localStorage.removeItem(CLOCK_STORAGE_KEY);
+}
 function loadOpeningRate() {
   try {
     const saved = JSON.parse(localStorage.getItem(RATE_STORAGE_KEY));
@@ -83,6 +97,13 @@ function formatHours(value) {
   return `${Number(value || 0).toFixed(2)} h`;
 }
 
+function formatElapsed(startedAt, now = Date.now()) {
+  const elapsedSeconds = Math.max(0, Math.floor((now - Date.parse(startedAt)) / 1000));
+  const hours = Math.floor(elapsedSeconds / 3600);
+  const minutes = Math.floor((elapsedSeconds % 3600) / 60);
+  const seconds = elapsedSeconds % 60;
+  return [hours, minutes, seconds].map((value) => String(value).padStart(2, '0')).join(':');
+}
 function formatMoney(value, currency) {
   return new Intl.NumberFormat('en', { style: 'currency', currency, currencyDisplay: 'narrowSymbol', minimumFractionDigits: 2 }).format(Number(value || 0));
 }
@@ -144,7 +165,7 @@ function renderOverview() {
   const sorted = [...state.entries].sort((a, b) => b.date.localeCompare(a.date));
   app.innerHTML = layout(`<main class="page">
     <div class="breadcrumb"><a href="#/">Workspace</a><span>/</span><span>Overview</span></div>
-    <section class="hero-row"><div><p class="eyebrow">Your time, made visible</p><h1>Good work deserves a clear record.</h1><p class="lede">Log each shift in seconds. Your hours stay private and available wherever you open this browser.</p></div><a class="button button-primary" href="#/log"><span class="button-icon">+</span> Log a shift</a></section>
+    <section class="hero-row"><div><p class="eyebrow">Your time, made visible</p><h1>Good work deserves a clear record.</h1><p class="lede">Log each shift by starting and ending work. Your hours stay private and available wherever you open this browser.</p></div><a class="button button-primary" href="#/log"><span class="button-icon">${state.activeClock ? '●' : '+'}</span> ${state.activeClock ? 'End work' : 'Start work'}</a></section>
     <section class="stats-grid" aria-label="Hours summary">
       <article class="stat-card stat-featured"><span class="stat-label">This week</span><strong>${formatHours(totalHours(week))}</strong><span class="stat-note">${week.length} shift${week.length === 1 ? '' : 's'} logged</span></article>
       <article class="stat-card"><span class="stat-label">All time</span><strong>${formatHours(totalHours())}</strong><span class="stat-note">Across ${state.entries.length} shift${state.entries.length === 1 ? '' : 's'}</span></article>
@@ -165,23 +186,92 @@ function renderEntries(entries, emptyMessage) {
 function renderLog() {
   updateMeta('Log hours | Hours Ledger', 'Add, edit, and manage your work shifts privately in Hours Ledger.');
   const editing = state.entries.find((entry) => entry.id === state.editingId);
+  const clockPanel = editing ? `
+    <div class="clock-panel">
+      <span class="clock-label">Recorded time</span>
+      <strong class="clock-time">${formatHours(editing.hours)}</strong>
+    </div>` : `
+    <div class="clock-panel ${state.activeClock ? 'clock-running' : ''}">
+      <div><span class="clock-label">${state.activeClock ? 'Work in progress' : 'Ready to work'}</span><strong class="clock-time" id="clock-time">${state.activeClock ? formatElapsed(state.activeClock.startedAt) : '00:00:00'}</strong></div>
+      <button class="button ${state.activeClock ? 'button-end' : 'button-primary'}" id="clock-button" type="button">${state.activeClock ? 'End work' : 'Start work'} <span>→</span></button>
+    </div>`;
   app.innerHTML = layout(`<main class="page narrow-page">
     <div class="breadcrumb"><a href="#/">Workspace</a><span>/</span><span>Log hours</span></div>
-    <div class="form-intro"><p class="eyebrow">${editing ? 'Update your record' : 'New record'}</p><h1>${editing ? 'Edit this shift.' : 'Log a shift.'}</h1><p class="lede">Keep the details lightweight. You can always come back and refine them later.</p></div>
-    <form class="shift-form" id="shift-form"><label>Work date<input type="date" name="date" required value="${editing?.date || new Date().toISOString().slice(0, 10)}"></label><label>Hours worked<input type="number" name="hours" min="0.25" max="24" step="0.25" required placeholder="7.5" value="${editing?.hours || ''}"></label><label>Project or role <span class="optional">Optional</span><input type="text" name="project" maxlength="80" placeholder="e.g. Client support" value="${escapeAttribute(editing?.project || '')}"></label><label>Note <span class="optional">Optional</span><textarea name="note" maxlength="180" rows="3" placeholder="What made this shift distinct?">${escapeHtml(editing?.note || '')}</textarea></label><div class="form-actions"><button class="button button-primary" type="submit">${editing ? 'Save changes' : 'Add shift'} <span>→</span></button>${editing ? '<a class="button button-quiet" href="#/log">Cancel</a>' : ''}</div></form>
+    <div class="form-intro"><p class="eyebrow">${editing ? 'Update your record' : 'New record'}</p><h1>${editing ? 'Edit this shift.' : 'Track a shift.'}</h1><p class="lede">${editing ? 'Update the details while keeping the recorded time unchanged.' : 'Press start when work begins and end when you finish.'}</p></div>
+    <form class="shift-form" id="shift-form">${clockPanel}<label>Work date<input type="date" name="date" required value="${editing?.date || new Date().toISOString().slice(0, 10)}" ${editing ? '' : 'disabled'}></label><label>Project or role <span class="optional">Optional</span><input type="text" name="project" maxlength="80" placeholder="e.g. Client support" value="${escapeAttribute(editing?.project || state.activeClock?.project || '')}"></label><label>Note <span class="optional">Optional</span><textarea name="note" maxlength="180" rows="3" placeholder="What made this shift distinct?">${escapeHtml(editing?.note || state.activeClock?.note || '')}</textarea></label><div class="form-actions">${editing ? `<button class="button button-primary" type="submit">Save changes <span>→</span></button><a class="button button-quiet" href="#/log">Cancel</a>` : ''}</div></form>
     <section class="content-section log-section"><div class="section-heading"><div><p class="eyebrow">All activity</p><h2>Your log</h2></div><span class="section-count">${state.entries.length} total</span></div>${renderEntries([...state.entries].sort((a, b) => b.date.localeCompare(a.date)), 'Entries you add will appear here.')}</section>
   </main>`, '/log');
-  document.querySelector('#shift-form').addEventListener('submit', handleSubmit);
+  const form = document.querySelector('#shift-form');
+  if (editing) form.addEventListener('submit', handleSubmit);
+  bindClockActions();
   bindEntryActions();
+}
+
+function bindClockActions() {
+  if (!state.activeClock) window.clearInterval(window.__clockInterval);
+  const clockButton = document.querySelector('#clock-button');
+  if (!clockButton) return;
+  clockButton.addEventListener('click', state.activeClock ? endClock : startClock);
+
+  const projectInput = document.querySelector('[name="project"]');
+  const noteInput = document.querySelector('[name="note"]');
+  projectInput?.addEventListener('input', () => {
+    if (!state.activeClock) return;
+    state.activeClock.project = projectInput.value;
+    saveActiveClock();
+  });
+  noteInput?.addEventListener('input', () => {
+    if (!state.activeClock) return;
+    state.activeClock.note = noteInput.value;
+    saveActiveClock();
+  });
+
+  if (state.activeClock) {
+    window.clearInterval(window.__clockInterval);
+    window.__clockInterval = window.setInterval(() => {
+      const clock = document.querySelector('#clock-time');
+      if (clock && state.activeClock) clock.textContent = formatElapsed(state.activeClock.startedAt);
+    }, 1000);
+  }
+}
+
+function startClock() {
+  const form = document.querySelector('#shift-form');
+  const data = Object.fromEntries(new FormData(form));
+  state.activeClock = { startedAt: new Date().toISOString(), project: data.project.trim(), note: data.note.trim() };
+  saveActiveClock();
+  render();
+}
+
+async function endClock() {
+  if (!state.activeClock) return;
+  const form = document.querySelector('#shift-form');
+  const data = Object.fromEntries(new FormData(form));
+  const elapsedHours = (Date.now() - Date.parse(state.activeClock.startedAt)) / 3600000;
+  if (elapsedHours <= 0) return;
+  const entry = {
+    id: crypto.randomUUID(),
+    date: state.activeClock.startedAt.slice(0, 10),
+    hours: Math.min(24, Number(elapsedHours.toFixed(4))),
+    project: data.project.trim(),
+    note: data.note.trim()
+  };
+  if (API_URL) await apiRequest('/api/entries', { method: 'POST', body: JSON.stringify(entry) });
+  state.entries.push(entry);
+  state.activeClock = null;
+  saveActiveClock();
+  saveEntries();
+  render();
 }
 
 async function handleSubmit(event) {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(event.currentTarget));
-  const entry = { id: state.editingId || crypto.randomUUID(), date: data.date, hours: Number(data.hours), project: data.project.trim(), note: data.note.trim() };
-  if (API_URL) await apiRequest(state.editingId ? `/api/entries/${state.editingId}` : '/api/entries', { method: state.editingId ? 'PUT' : 'POST', body: JSON.stringify(entry) });
-  if (state.editingId) state.entries = state.entries.map((item) => item.id === state.editingId ? entry : item);
-  else state.entries.push(entry);
+  const existing = state.entries.find((item) => item.id === state.editingId);
+  if (!existing) return;
+  const entry = { id: state.editingId, date: data.date, hours: existing.hours, project: data.project.trim(), note: data.note.trim() };
+  if (API_URL) await apiRequest(`/api/entries/${state.editingId}`, { method: 'PUT', body: JSON.stringify(entry) });
+  state.entries = state.entries.map((item) => item.id === state.editingId ? entry : item);
   state.editingId = null;
   saveEntries();
   window.location.hash = '/log';
