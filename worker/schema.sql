@@ -1,0 +1,10 @@
+CREATE TABLE IF NOT EXISTS entries (
+  id TEXT PRIMARY KEY,
+  date TEXT NOT NULL,
+  hours REAL NOT NULL CHECK (hours > 0 AND hours <= 24),
+  project TEXT NOT NULL DEFAULT '',
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS entries_date_idx ON entries(date DESC);
